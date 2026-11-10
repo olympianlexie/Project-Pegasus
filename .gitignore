@@ -1,0 +1,19 @@
+# Source exports and every output contain customer account numbers and
+# network locations. This repository is public: never commit them.
+data/
+output/
+*.xlsx
+*.xls
+*.csv
+!boundaries/*.csv
+*.kmz
+*.kml
+*.pkl
+*.parquet
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
