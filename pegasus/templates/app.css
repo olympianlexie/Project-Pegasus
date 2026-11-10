@@ -95,3 +95,11 @@ footer { color: var(--muted); font-size: 11px; padding-top: 10px; }
 .leaflet-control-layers, .leaflet-bar a, .leaflet-control-attribution, .leaflet-control-scale-line { background: var(--card); color: var(--fg); border-color: var(--line); }
 .leaflet-control-attribution a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* empty parts of vector layers and heat maps must not block clicks on layers below */
+.leaflet-pane > svg { pointer-events: none; }
+.leaflet-heatmap-layer { pointer-events: none; }
+.nap-label { background: transparent; border: 0; white-space: nowrap; font: 600 11px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #1d2330; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; pointer-events: none; }
+.nap-label .sw { width: 8px; height: 8px; margin-right: 3px; vertical-align: -0.5px; }
+.leaflet-tooltip .sw { width: 9px; height: 9px; vertical-align: -1px; }

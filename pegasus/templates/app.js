@@ -56,7 +56,7 @@
   for (k = 0; k < D.sell.i.length; k++) sellBy[D.sell.i[k]] = k;
 
   // ---------- map and base layers ----------
-  var map = L.map('map', { preferCanvas: true, maxZoom: 20, zoomControl: true }).setView(M.center, M.zoom);
+  var map = L.map('map', { preferCanvas: false, maxZoom: 20, zoomControl: true }).setView(M.center, M.zoom);
   var esriAttr = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
   var tileNote = false;
   function onTileError() {
@@ -83,10 +83,13 @@
   bases['Street map (OpenStreetMap)'].addTo(map);
 
   function pane(name, z) { map.createPane(name).style.zIndex = z; return name; }
-  pane('choro', 350); pane('outline', 360); pane('hot', 390); pane('reloc', 450);
-  var napCanvas = L.canvas({ padding: 0.5 });
-  var relocCanvas = L.canvas({ pane: 'reloc', padding: 0.5 });
-  var hotCanvas = L.canvas({ pane: 'hot', padding: 0.5 });
+  // Vector layers use SVG: the empty parts of each layer let clicks through to the layers below
+  // (a canvas layer would swallow every click under it).
+  pane('choro', 350); pane('outline', 360); pane('hot', 390); pane('reloc', 450); pane('labels', 640);
+  map.getPane('labels').style.pointerEvents = 'none';
+  var napCanvas = L.svg({ padding: 0.5 });
+  var relocCanvas = L.svg({ pane: 'reloc', padding: 0.5 });
+  var hotCanvas = L.svg({ pane: 'hot', padding: 0.5 });
 
   // ---------- NAP markers (clustered) ----------
   var markers = new Array(NN);
@@ -123,6 +126,18 @@
     iconCreateFunction: clusterIcon
   });
   cluster.on('click', function (e) { if (e.layer && e.layer._pi != null) openNap(e.layer._pi); });
+  cluster.on('mouseover', function (e) {
+    var i = e.layer && e.layer._pi;
+    if (i == null) return;
+    e.layer.bindTooltip('<b>' + esc(N.id[i]) + '</b> · ' + LV[N.lv[i]] + ' · ' + N.u[i] + '/' + N.t[i] + ' used',
+      { direction: 'top', offset: [0, -6] }).openTooltip();
+  });
+  cluster.on('clustermouseover', function (e) {
+    var ms = e.layer.getAllChildMarkers();
+    var html = ms.length > 12 ? fmt(ms.length) + ' NAPs: zoom in or click to see their IDs'
+      : ms.map(function (m) { return '<span class="sw" style="background:' + COL[N.lv[m._pi]] + '"></span> ' + esc(N.id[m._pi]); }).join('<br>');
+    e.layer.bindTooltip(html, { direction: 'top', offset: [0, -14] }).openTooltip();
+  });
   cluster.addTo(map);
 
   // ---------- OLT markers ----------
@@ -246,6 +261,33 @@
       state.show !== '' || state.levels.some(function (x) { return !x; });
   }
 
+  // NAP ID labels: from zoom LABEL_ZOOM, write every visible NAP's ID next to its pole
+  var LABEL_ZOOM = 17, LABEL_MAX = 600;
+  var labelLayer = L.layerGroup().addTo(map);
+  function refreshLabels() {
+    labelLayer.clearLayers();
+    if (!map.hasLayer(labelLayer) || map.getZoom() < LABEL_ZOOM) return;
+    var b = map.getBounds().pad(0.1), poles = {}, keys = [];
+    for (var i = 0; i < NN; i++) {
+      if (!mask[i] || !b.contains([N.lat[i], N.lon[i]])) continue;
+      var k = N.lat[i] + ',' + N.lon[i];
+      if (!poles[k]) { poles[k] = []; keys.push(k); }
+      poles[k].push(i);
+    }
+    if (keys.length > LABEL_MAX) return;
+    keys.forEach(function (k) {
+      var ids = poles[k].sort(function (x, y) { return natCmp(N.id[x], N.id[y]); });
+      var html = ids.map(function (j) {
+        return '<div><span class="sw" style="background:' + COL[N.lv[j]] + '"></span>' + esc(N.id[j]) + '</div>';
+      }).join('');
+      labelLayer.addLayer(L.marker([N.lat[ids[0]], N.lon[ids[0]]], {
+        pane: 'labels', interactive: false, keyboard: false,
+        icon: L.divIcon({ className: 'nap-label', html: html, iconSize: null, iconAnchor: [-14, 8 * ids.length] })
+      }));
+    });
+  }
+  map.on('moveend', refreshLabels);
+
   function applyFilters() {
     var list = [];
     for (var i = 0; i < NN; i++) { mask[i] = pass(i) ? 1 : 0; if (mask[i]) list.push(markers[i]); }
@@ -257,6 +299,7 @@
     refreshReloc();
     refreshOlts();
     refreshHot();
+    refreshLabels();
     document.getElementById('filterNote').textContent = isFiltered() ? '(filtered)' : '(all NAPs)';
   }
 
@@ -575,20 +618,20 @@
     ['&lt; 30%', '30–60%', '60–80%', '&gt; 80%'].map(function (t, lv) {
       return '<div class="leg"><span class="sq" style="background:' + COL[lv] + ';opacity:.6"></span>' + t + '</div>';
     }).join('') +
-    '<div class="hint" style="margin-top:6px">Heat maps, choropleths and demand hotspots: use the layer switcher (top right). Heat maps show up to zoom 17.</div>';
+    '<div class="hint" style="margin-top:6px">Heat maps, choropleths and demand hotspots: use the layer switcher (top right). Heat maps show up to zoom 17. Zoom in to street level to see every NAP ID; hover a dot for its ID, click it for details.</div>';
   el('legend').innerHTML = legend;
   el('meta').innerHTML = 'Data: ' + esc(M.raw) + (M.tableau ? ' + ' + esc(M.tableau) : '') + '<br>Built ' + esc(M.generated) +
     ' · utilized = ' + esc(M.utilized.join(' + ')) + '<br>OLT locations are approximate (centroid of their NAPs) unless a site file was provided.';
 
   // layer switcher
   var overlays = {
-    'NAPs': cluster, 'OLTs': oltLayer, 'Relocation recommendations': relocLayer, 'Demand hotspots (Risk/High groups)': hotLayer,
+    'NAPs': cluster, 'NAP ID labels (zoom in)': labelLayer, 'OLTs': oltLayer, 'Relocation recommendations': relocLayer, 'Demand hotspots (Risk/High groups)': hotLayer,
     'Heat: Risk NAPs': heats[3], 'Heat: High NAPs': heats[2], 'Heat: Optimal NAPs': heats[1], 'Heat: Low NAPs': heats[0],
     'Choropleth: barangay utilization': choroB, 'Choropleth: municipality utilization': choroM, 'Municipality boundaries': outline
   };
   L.control.layers(bases, overlays, { collapsed: window.innerWidth < 1100 }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
-  map.on('overlayadd', function (e) { if (heats.indexOf(e.layer) >= 0) refreshHeat(); });
+  map.on('overlayadd', function (e) { if (heats.indexOf(e.layer) >= 0) refreshHeat(); if (e.layer === labelLayer) refreshLabels(); });
   function zoomClass() {
     var z = map.getZoom(), c = map.getContainer().classList;
     c.toggle('zlow', z < 11); c.toggle('zmid', z >= 11 && z < 14);
