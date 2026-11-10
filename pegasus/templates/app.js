@@ -58,7 +58,19 @@
   // ---------- map and base layers ----------
   var map = L.map('map', { preferCanvas: true, maxZoom: 20, zoomControl: true }).setView(M.center, M.zoom);
   var esriAttr = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
-  var tile = function (url, attr) { return L.tileLayer(url, { maxZoom: 20, maxNativeZoom: 19, attribution: attr || '' }); };
+  var tileNote = false;
+  function onTileError() {
+    if (tileNote) return;
+    tileNote = true;
+    var d = document.createElement('div');
+    d.className = 'tilenote';
+    d.textContent = 'The street and satellite background maps could not load here (no internet, or this viewer blocks them). ' +
+      'NAPs, OLTs, boundaries and all layers still work. Open the downloaded HTML file in a browser to see the background maps.';
+    document.getElementById('map').appendChild(d);
+  }
+  var tile = function (url, attr) {
+    return L.tileLayer(url, { maxZoom: 20, maxNativeZoom: 19, attribution: attr || '' }).on('tileerror', onTileError);
+  };
   var bases = {
     'Street map (OpenStreetMap)': tile('https://tile.openstreetmap.org/{z}/{x}/{y}.png', '&copy; OpenStreetMap contributors'),
     'Satellite (Esri)': tile('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', esriAttr),
@@ -128,7 +140,7 @@
 
   // ---------- boundaries: outline + choropleths ----------
   var outline = L.geoJSON(D.geoM, { pane: 'outline', interactive: false,
-    style: { color: '#222', weight: 1.2, opacity: 0.55, fill: false, dashArray: '4 3' } }).addTo(map);
+    style: { color: '#7d8796', weight: 1.4, opacity: 0.85, fill: false, dashArray: '4 3' } }).addTo(map);
   var aggB = [], aggM = [];
   function styleFor(a) {
     if (!a || !a.t) return { color: '#777', weight: 0.6, fillOpacity: 0.04, fillColor: '#999' };

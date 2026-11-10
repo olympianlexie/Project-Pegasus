@@ -158,3 +158,14 @@ def build(ds, reloc: dict, out_path: Path) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     return out_path
+
+
+def to_hosted_page(html_path: Path, out_path: Path) -> Path:
+    """Same map as a page body for a host that adds its own doctype/head/body (e.g. a claude.ai artifact)."""
+    import re
+    html = html_path.read_text(encoding="utf-8")
+    styles = "".join(re.findall(r"<style>.*?</style>", html, flags=re.S))
+    body = re.search(r"<body>(.*)</body>", html, flags=re.S).group(1)
+    page = ("<title>Project Pegasus</title>\n<style>html, body { height: 100%; }</style>\n" + styles + "\n" + body)
+    out_path.write_text(page, encoding="utf-8")
+    return out_path
