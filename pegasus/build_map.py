@@ -118,7 +118,18 @@ def payload(ds, reloc: dict) -> dict:
     sl = {"i": [idx[x] for x in sell["nap_id"]], "d": _r(sell["nearest_demand_m"], 0),
           "n": [idx.get(x, -1) for x in sell["nearest_demand_nap"]]}
 
+    from shapely.geometry import shape
+    def label_point(geom):
+        p = shape(geom).representative_point()
+        return round(p.y, 6), round(p.x, 6)
+    places = {
+        "m": [[f["properties"]["municipality"], *label_point(f["geometry"])] for f in ds.munis["features"]],
+        "b": [[f["properties"]["barangay"], f["properties"]["municipality"], *label_point(f["geometry"])]
+              for f in ds.bgys["features"]],
+    }
+
     return {
+        "places": places,
         "meta": {
             "title": config.MAP_TITLE, "generated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
             "raw": ds.raw_path.name, "tableau": ds.tableau_path.name if ds.tableau_path else None,

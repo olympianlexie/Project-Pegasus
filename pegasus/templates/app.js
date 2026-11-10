@@ -58,18 +58,25 @@
   // ---------- map and base layers ----------
   var map = L.map('map', { preferCanvas: false, maxZoom: 20, zoomControl: true }).setView(M.center, M.zoom);
   var esriAttr = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
-  var tileNote = false;
+  // Street and satellite maps come from other sites. Where they can't load (offline, or a viewer that blocks
+  // outside images), switch to the built-in barangay map once and say why.
+  var tileNote = null, tilesLoaded = 0;
   function onTileError() {
-    if (tileNote) return;
-    tileNote = true;
+    if (tilesLoaded > 0) return;
+    if (tileNote) { if (!tileNote.parentNode) document.getElementById('map').appendChild(tileNote); return; }
+    Object.keys(bases).forEach(function (k) { if (bases[k] !== offlineBase && map.hasLayer(bases[k])) map.removeLayer(bases[k]); });
+    map.addLayer(offlineBase);
     var d = document.createElement('div');
     d.className = 'tilenote';
-    d.textContent = 'The street and satellite background maps could not load here (no internet, or this viewer blocks them). ' +
-      'NAPs, OLTs, boundaries and all layers still work. Open the downloaded HTML file in a browser to see the background maps.';
+    d.innerHTML = '<button class="tilenote-x" aria-label="Close">&times;</button>Street and satellite maps can\'t load in this view, ' +
+      'so the built-in barangay map is shown instead. For street and satellite maps, open the downloaded map file in Chrome or Edge.';
+    d.querySelector('button').addEventListener('click', function () { d.remove(); });
     document.getElementById('map').appendChild(d);
+    tileNote = d;
   }
   var tile = function (url, attr) {
-    return L.tileLayer(url, { maxZoom: 20, maxNativeZoom: 19, attribution: attr || '' }).on('tileerror', onTileError);
+    return L.tileLayer(url, { maxZoom: 20, maxNativeZoom: 19, attribution: attr || '' })
+      .on('tileerror', onTileError).on('tileload', function () { tilesLoaded++; });
   };
   var bases = {
     'Street map (OpenStreetMap)': tile('https://tile.openstreetmap.org/{z}/{x}/{y}.png', '&copy; OpenStreetMap contributors'),
@@ -80,9 +87,20 @@
       tile('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
     ])
   };
-  bases['Street map (OpenStreetMap)'].addTo(map);
 
   function pane(name, z) { map.createPane(name).style.zIndex = z; return name; }
+  // Built-in background: barangay areas drawn from the boundary data in this file, so it works anywhere.
+  pane('basebg', 210);
+  map.getPane('basebg').style.pointerEvents = 'none';
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  var offlineBase = L.layerGroup([
+    L.geoJSON(D.geoB, { pane: 'basebg', interactive: false, renderer: L.svg({ pane: 'basebg' }),
+      style: function () { return { color: cssVar('--land-line'), weight: 0.8, fillColor: cssVar('--land'), fillOpacity: 1 }; } }),
+    L.geoJSON(D.geoM, { pane: 'basebg', interactive: false, renderer: L.svg({ pane: 'basebg' }),
+      style: function () { return { color: cssVar('--land-edge'), weight: 1.6, fill: false }; } })
+  ]);
+  bases['Barangay map (built in, works offline)'] = offlineBase;
+  bases['Street map (OpenStreetMap)'].addTo(map);
   // Vector layers use SVG: the empty parts of each layer let clicks through to the layers below
   // (a canvas layer would swallow every click under it).
   pane('choro', 350); pane('outline', 360); pane('hot', 390); pane('reloc', 450); pane('labels', 640);
@@ -198,7 +216,7 @@
     { 0.2: '#fdd0a2', 0.5: '#fd8d3c', 0.8: '#d94801', 1: '#7f2704' },
     { 0.2: '#fcbba1', 0.5: '#fb6a4a', 0.8: '#cb181d', 1: '#67000d' }
   ];
-  var heats = LV.map(function (_, lv) { return L.heatLayer([], { radius: 14, blur: 16, maxZoom: 17, minOpacity: 0.2, gradient: heatGrad[lv] }); });
+  var heats = LV.map(function (_, lv) { return L.heatLayer([], { radius: 14, blur: 16, intensityZoom: 17, minOpacity: 0.2, gradient: heatGrad[lv] }); });
 
   // ---------- relocation and hotspot layers ----------
   var relocLayer = L.layerGroup().addTo(map);
@@ -287,6 +305,27 @@
     });
   }
   map.on('moveend', refreshLabels);
+
+  // Place names: municipalities when zoomed out, barangays when zoomed in
+  var PLACE_ZOOM = 13;
+  var placeLayer = L.layerGroup().addTo(map);
+  function placeLabel(lat, lon, text, cls) {
+    return L.marker([lat, lon], { pane: 'labels', interactive: false, keyboard: false,
+      icon: L.divIcon({ className: cls, html: '<span>' + esc(text) + '</span>', iconSize: null, iconAnchor: [0, 0] }) });
+  }
+  function refreshPlaces() {
+    placeLayer.clearLayers();
+    if (!map.hasLayer(placeLayer)) return;
+    if (map.getZoom() < PLACE_ZOOM) {
+      D.places.m.forEach(function (p) { placeLayer.addLayer(placeLabel(p[1], p[2], p[0], 'place-muni')); });
+    } else {
+      var b = map.getBounds().pad(0.2);
+      D.places.b.forEach(function (p) {
+        if (b.contains([p[2], p[3]])) placeLayer.addLayer(placeLabel(p[2], p[3], p[0], 'place-brgy'));
+      });
+    }
+  }
+  map.on('moveend', refreshPlaces);
 
   function applyFilters() {
     var list = [];
@@ -618,20 +657,20 @@
     ['&lt; 30%', '30–60%', '60–80%', '&gt; 80%'].map(function (t, lv) {
       return '<div class="leg"><span class="sq" style="background:' + COL[lv] + ';opacity:.6"></span>' + t + '</div>';
     }).join('') +
-    '<div class="hint" style="margin-top:6px">Heat maps, choropleths and demand hotspots: use the layer switcher (top right). Heat maps show up to zoom 17. Zoom in to street level to see every NAP ID; hover a dot for its ID, click it for details.</div>';
+    '<div class="hint" style="margin-top:6px">Heat maps, choropleths and demand hotspots: use the layer switcher (top right). Zoom in to street level to see every NAP ID; hover a dot for its ID, click it for details.</div>';
   el('legend').innerHTML = legend;
   el('meta').innerHTML = 'Data: ' + esc(M.raw) + (M.tableau ? ' + ' + esc(M.tableau) : '') + '<br>Built ' + esc(M.generated) +
     ' · utilized = ' + esc(M.utilized.join(' + ')) + '<br>OLT locations are approximate (centroid of their NAPs) unless a site file was provided.';
 
   // layer switcher
   var overlays = {
-    'NAPs': cluster, 'NAP ID labels (zoom in)': labelLayer, 'OLTs': oltLayer, 'Relocation recommendations': relocLayer, 'Demand hotspots (Risk/High groups)': hotLayer,
+    'Place names (municipality, barangay)': placeLayer, 'NAPs': cluster, 'NAP ID labels (zoom in)': labelLayer, 'OLTs': oltLayer, 'Relocation recommendations': relocLayer, 'Demand hotspots (Risk/High groups)': hotLayer,
     'Heat: Risk NAPs': heats[3], 'Heat: High NAPs': heats[2], 'Heat: Optimal NAPs': heats[1], 'Heat: Low NAPs': heats[0],
     'Choropleth: barangay utilization': choroB, 'Choropleth: municipality utilization': choroM, 'Municipality boundaries': outline
   };
   L.control.layers(bases, overlays, { collapsed: window.innerWidth < 1100 }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
-  map.on('overlayadd', function (e) { if (heats.indexOf(e.layer) >= 0) refreshHeat(); if (e.layer === labelLayer) refreshLabels(); });
+  map.on('overlayadd', function (e) { if (heats.indexOf(e.layer) >= 0) refreshHeat(); if (e.layer === labelLayer) refreshLabels(); if (e.layer === placeLayer) refreshPlaces(); });
   function zoomClass() {
     var z = map.getZoom(), c = map.getContainer().classList;
     c.toggle('zlow', z < 11); c.toggle('zmid', z >= 11 && z < 14);
@@ -644,5 +683,6 @@
 
   fillBrgy(); fillOlt();
   applyFilters();
+  refreshPlaces();
   window.pegasus = { map: map, cluster: cluster, state: state, applyFilters: applyFilters, gotoNap: gotoNap, napIndex: napIndex, data: D };
 })();
