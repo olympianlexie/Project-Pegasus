@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+/*__VENDOR_CSS__*/
+</style>
+<style>
+/*__APP_CSS__*/
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header class="ph">
+      <div class="title">Project Pegasus</div>
+      <div class="sub">Laguna NAP / OLT utilization</div>
+      <button id="panelToggle" class="iconbtn" title="Hide panel" aria-label="Hide panel">&#x2039;</button>
+    </header>
+
+    <section>
+      <label class="lbl" for="search">Search NAP, LCP or OLT ID</label>
+      <div class="row">
+        <input id="search" list="searchList" placeholder="e.g. ABC001 LP12 NP3" autocomplete="off">
+        <button id="searchBtn">Go</button>
+      </div>
+      <datalist id="searchList"></datalist>
+      <div id="searchMsg" class="msg"></div>
+    </section>
+
+    <section>
+      <div class="lbl">Summary <span class="hint" id="filterNote">(all NAPs)</span></div>
+      <div id="summary"></div>
+    </section>
+
+    <section>
+      <div class="lbl">Filters <button id="resetBtn" class="link">Reset</button></div>
+      <label class="sl" for="fMuni">Municipality</label>
+      <select id="fMuni"><option value="">All municipalities</option></select>
+      <label class="sl" for="fBrgy">Barangay</label>
+      <select id="fBrgy"><option value="">All barangays</option></select>
+      <label class="sl" for="fOlt">OLT</label>
+      <select id="fOlt"><option value="">All OLTs</option></select>
+      <div class="sl">NAP level</div>
+      <div id="fLevels" class="levels"></div>
+      <label class="sl">RFS date</label>
+      <div class="row dates">
+        <input type="date" id="fFrom" aria-label="RFS from"> <span>to</span> <input type="date" id="fTo" aria-label="RFS to">
+      </div>
+      <label class="sl" for="fShow">Show</label>
+      <select id="fShow">
+        <option value="">All NAPs</option>
+        <option value="relocate">Recommended to relocate</option>
+        <option value="reloc_target">Relocation target NAPs</option>
+        <option value="sell_existing">Low NAPs near demand (sell from existing)</option>
+        <option value="zero">Low NAPs with 0 used ports</option>
+        <option value="flagged">Data-quality flags</option>
+        <option value="placeholder_stack">Possible placeholder coordinates</option>
+        <option value="olt_inferred">OLT inferred (blank in raw)</option>
+        <option value="new_vs_tableau">New since Tableau export</option>
+        <option value="level_differs_tableau">Level differs from Tableau</option>
+      </select>
+    </section>
+
+    <section>
+      <div class="lbl">Legend</div>
+      <div id="legend"></div>
+    </section>
+
+    <footer id="meta"></footer>
+  </aside>
+  <div id="map"></div>
+  <button id="panelShow" class="iconbtn" title="Show panel" aria-label="Show panel">&#x203a;</button>
+</div>
+<script type="application/json" id="pegasus-data">__DATA__</script>
+<script>
+/*__VENDOR_JS__*/
+</script>
+<script>
+/*__APP_JS__*/
+</script>
+</body>
+</html>
